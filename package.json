@@ -1,0 +1,1 @@
+{ "name": "spell-defense", "private": true, "scripts": { "test": "node --test", "words": "node tools/build-words.mjs" } }
