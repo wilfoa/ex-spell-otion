@@ -55,13 +55,13 @@ Under the top bar, centered, always visible during a challenge game:
 ### 4.1 Definitions
 - **needed** = multiset of the challenge word's letters minus the multiset of letters currently in the plan (marked drones). Plan letters that are not in the word do not reduce anything.
 - **fall time left** for a drone = `(groundY − 2R − d.y) / d.vy` seconds.
-- **T** = `4 + 1 × |needed|` seconds.
-- A drone is **reachable** if it is unmarked and its fall time left ≥ T.
+- **T(d)** = `min(4 + 1 × |needed|, 0.6 × groundY / d.vy)` seconds — capped at 60 % of the drone's full fall time (spawn at `-2R` to landing at `groundY − 2R` is `groundY` px), so a freshly spawned drone always counts as reachable even at speed 10 on a short screen.
+- A drone is **reachable** if it is unmarked and its fall time left ≥ T(d).
 - **missing** = needed minus the multiset of letters on reachable drones.
 
 ### 4.2 Spawning
 Each game update in Challenge mode, before the normal spawn:
-- If `missing` is non-empty: spawn one drone immediately carrying one missing letter (ignoring the spawn timer and the target count), then reset the spawn timer. At most one forced spawn per update. Forced spawns are bounded because `|missing| ≤ |needed| ≤ 8`; normal spawns stay suppressed while the drone count is at or above the target count, so the sky never exceeds `targetCount + 8`.
+- If `missing` is non-empty and at least 0.25 s have passed since the last forced spawn: spawn one drone immediately carrying one missing letter (ignoring the spawn timer and the target count), then reset the spawn timer. At most one forced spawn per 0.25 s. Forced spawns are bounded because `|missing| ≤ |needed| ≤ 8`; normal spawns stay suppressed while the drone count is at or above the target count, so the sky never exceeds `targetCount + 8`.
 - Otherwise, the normal timer/target-count spawn applies, and its letter is chosen: 50 % **decoy** (see 4.3), 50 % weighted random filler (`Lexicon.letterWeights` of the common list).
 - The Free-mode `LetterQueue` is not used in Challenge mode.
 
@@ -72,7 +72,7 @@ Confusable pairs (both directions):
 - he: ס–ש, ח–כ, ב–כ, ט–ת, ד–ר, ו–ז, ה–ח
 
 ### 4.4 Guarantee
-Property: in a simulated Challenge game (any seed, speed 1 and 10, W = 360 and 1440, H = 740, updates of 1/60 s), after an initial 2 s warm-up, `missing` is never non-empty for more than `challenge.word.length` consecutive updates (each update restores one missing letter). Tested headlessly (§8).
+Property: in a simulated Challenge game (any seed, speed 1 and 10, W = 360 and 1440, H = 740, updates of 1/60 s), after an initial 2 s warm-up, no letter stays in `missing` for longer than `0.25 × challenge.word.length + 0.05` s of simulated time (one forced spawn per 0.25 s), and the drone count never exceeds `targetCount + 8`. Tested headlessly (§8).
 
 ## 5. "Did you mean…?" (Free mode only)
 
