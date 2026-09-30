@@ -20,7 +20,7 @@
 - `git` is a broken shell function on this machine: always use `/usr/bin/git`. Bash heredocs may write empty files: use the Write tool.
 - Levels unchanged: Easy min 2 ×1, Medium min 4 ×2, Hard min 6 ×3. Lives 5.
 - Challenge word length: `minLength … minLength + 2` via existing `Lexicon.SeedDeck`.
-- Coverage: `T(d) = min(4 + |needed|, 0.6 × groundY / d.vy)`; drone lands at `y >= groundY − 2R`; forced spawn at most once per 0.25 s, ignoring spawn timer and target count.
+- Coverage: `T(d) = min(4 + |needed|, 0.4 × groundY / d.vy)`; drone lands at `y >= groundY − 2R`; forced spawn at most once per 0.25 s, ignoring spawn timer and target count.
 - Suggestion: OSA Damerau-Levenshtein; `maxDist = 1` if attempt length ≤ 4 else 2; candidates `length ≥ minLength`, `|len − attemptLen| ≤ maxDist`; ties → earlier in valid list.
 - Challenge score: `10 × length × multiplier`, halved (floor) if peeked. Peek/skip reveal: 2 s. Suggestion card: ~3 s.
 - Settings: `mode` ∈ {`free`,`challenge`} default `free`; `lang` default `he`. Best keys: Free `spellDefense.best.<lang>.<level>` (unchanged), Challenge `spellDefense.best.challenge.<lang>.<level>`.
@@ -76,7 +76,7 @@
 - Produces:
   - `Challenge.CONFUSABLE: { [lang]: { [letter]: string[] } }` — built from the pair lists in spec §4.3, both directions, e.g. `en.b = ['d']`, `he['כ'] = ['ח','ב']`, `he['ח'] = ['כ','ה']`.
   - `needed(word: string, planLetters: string[]): string[]` — multiset difference, word order preserved.
-  - `missing(needed: string[], drones: Array<{letter, y, vy, marked}>, { groundY, R }): string[]` — per spec §4.1 with `T(d) = min(4 + needed.length, 0.6 * groundY / d.vy)`; each reachable drone covers at most one needed letter.
+  - `missing(needed: string[], drones: Array<{letter, y, vy, marked}>, { groundY, R }): string[]` — per spec §4.1 with `T(d) = min(4 + needed.length, 0.4 * groundY / d.vy)`; each reachable drone covers at most one needed letter.
   - `decoy(word: string, lang, rng): string` — spec §4.3.
   - `judge(letters: string[], word: string, lang): 'short'|'match'|'miss'` — `short` if `letters.length < word.length`; compare `Lexicon.normalize(letters.join(''), lang) === word`.
   - `Rules.challengeScore(length: number, level, peeked: boolean): number`.
@@ -84,7 +84,7 @@
 - [ ] **Step 1: Write failing tests**
   - `needed('apple', ['p'])` → `['a','p','l','e']`; `needed('apple', ['x'])` → `['a','p','p','l','e']`.
   - `missing(['a','p','p'], drones, {groundY: 700, R: 30})` with drones: `a` at y 100 vy 50 (reachable), `p` at y 100 vy 50, `p` at y 600 vy 50 (fall left 0.8 s < T) → `['p']`; a marked `p` drone never covers.
-  - T cap: needed of length 8, drone `a` at y −60 with vy 200, groundY 700 → full-fall 3.5 s, `0.6 × 700/200 = 2.1`; fall left `(700−60+60)/200 = 3.5 ≥ 2.1` → reachable, so `missing(['a',…], …)` excludes `a`.
+  - T cap: needed of length 8, drone `a` at y −60 with vy 200, groundY 700 → full-fall 3.5 s, `0.4 × 700/200 = 1.4`; fall left `(700−60+60)/200 = 3.5 ≥ 1.4` → reachable, so `missing(['a',…], …)` excludes `a`.
   - `decoy('bat','en', rng)` over 200 rng draws only returns letters in `{b,a,t,d}`; Hebrew `decoy('כלב','he', rng)` only returns letters in `{כ,ל,ב,ח}` (plus `ב`'s confusable `כ`).
   - `judge(['c','a'],'cat','en') === 'short'`; `judge(['c','a','t'],'cat','en') === 'match'`; `judge(['c','u','t'],'cat','en') === 'miss'`; `judge(['ש','ל','ו','ם'], Lexicon.normalize('שלום','he'), 'he') === 'match'`.
   - `challengeScore(3,'easy',false) === 30`; `challengeScore(4,'medium',true) === 40`; `challengeScore(5,'hard',true) === 75`.

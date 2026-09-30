@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" dir="ltr">
+<html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
@@ -108,6 +108,33 @@
   .iconbtn > span, .iconbtn > svg { width: 24px; height: 24px; }
   .iconbtn.off { color: var(--muted); }
 
+  /* ---------- Challenge card (hangs just below the top bar, so it can never overlap it) ---------- */
+  .cardrow { position: absolute; top: 100%; inset-inline: 0; padding-inline: inherit; display: flex; justify-content: center; pointer-events: none !important; }
+  .cardrow[hidden] { display: none; }
+  #challenge {
+    display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px; border-radius: 26px; pointer-events: auto;
+    background: var(--glass); border: 1.5px solid var(--edge);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .08);
+  }
+  #challenge .iconbtn { background: rgba(255, 255, 255, .1); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  #challenge .iconbtn[hidden] { display: none; }
+  #challenge .iconbtn:disabled { opacity: .4; }
+  #skipBtn { width: auto; gap: 6px; padding: 0 16px 0 12px; border-radius: 999px; display: flex; font-size: 18px; font-weight: 600; }
+  #skipBtn > span:first-child { width: 20px; height: 20px; }
+  #slots { display: flex; justify-content: center; gap: 5px; padding: 0 4px; }
+  .cslot {
+    flex: none; width: 40px; height: 46px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 28px; font-weight: 700; line-height: 1; color: var(--tile-ink);
+    background: rgba(255, 255, 255, .05); border: 2px dashed rgba(200, 210, 255, .35);
+  }
+  .cslot.filled { border: 0; background: linear-gradient(180deg, #fff6d6, var(--accent)); box-shadow: 0 3px 0 var(--accent-deep); }
+  .cslot.filled.pop { animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); }
+  .cslot[data-t] { position: relative; }
+  .cslot[data-t]::after { content: attr(data-t); position: absolute; bottom: 1px; inset-inline-end: 3px; font-size: 11px; font-weight: 600; color: rgba(60, 40, 0, .5); }
+  .cslot.ghost { color: rgba(238, 242, 255, .7); border-style: solid; }
+  .cslot.reveal { border: 0; background: linear-gradient(180deg, #e3f4ff, #7cc4ff); box-shadow: 0 3px 0 #2f6fa8; animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); }
+
   /* ---------- Range slider ---------- */
   input[type="range"] {
     -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 40px; margin: 0; background: none; cursor: pointer;
@@ -192,6 +219,17 @@
   .toast.bad { background: linear-gradient(180deg, #ff7d93, #e0294b); text-shadow: 0 2px 0 #8e1d33; }
   .toast.warn { background: linear-gradient(180deg, #ffd66b, #f29b1d); color: #3a2300; }
   .toast .pts { font-size: .7em; padding: 0 12px; border-radius: 99px; background: rgba(255, 255, 255, .25); }
+  /* "Did you mean" card: stays ~3 s, attempt letters beneath the suggestion. */
+  .toast.suggest { flex-direction: column; align-items: center; gap: 8px; font-size: clamp(22px, 6.5vw, 40px); animation-duration: 3s;
+    background: linear-gradient(180deg, rgba(38, 46, 108, .97), rgba(14, 18, 48, .98)); border-color: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, .4); }
+  .suggest b { color: var(--accent); }
+  .suggest .attempt { display: flex; align-items: center; gap: 4px; max-width: 100%; }
+  .suggest .al {
+    display: grid; place-items: center; width: 1.3em; height: 1.45em; border-radius: 8px; font-size: .8em;
+    color: var(--tile-ink); text-shadow: none; background: linear-gradient(180deg, #fff, #fff6d6); box-shadow: 0 3px 0 rgba(0, 0, 0, .25);
+  }
+  .suggest .al.wrong { color: #fff; background: linear-gradient(180deg, #ff7d93, #d41c3f); box-shadow: 0 3px 0 #8e1d33; }
+  .suggest .caret { width: 0; height: 0; margin: 0 2px; align-self: flex-end; border: 8px solid transparent; border-bottom: 12px solid var(--bad); border-top: 0; }
   @keyframes toast {
     0% { transform: scale(.3) translateY(20px); opacity: 0; }
     15% { transform: scale(1.08); opacity: 1; }
@@ -300,6 +338,11 @@
     .chip .val { font-size: 19px; }
     .ico { width: 20px; height: 20px; }
     .iconbtn > span, .iconbtn > svg { width: 20px; height: 20px; }
+    #challenge { flex: 1; gap: 6px; padding: 5px; }
+    #slots { flex: 1; min-width: 0; gap: 4px; padding: 0; container-type: inline-size; }
+    .cslot { width: min(34px, calc((100vw - 190px) / var(--n))); width: clamp(18px, calc((100cqi - (var(--n) - 1) * 4px) / var(--n)), 34px); height: 40px; font-size: 22px; font-size: clamp(14px, calc((100cqi - (var(--n) - 1) * 4px) / var(--n) * .7), 24px); border-radius: 8px; }
+    #skipBtn { width: var(--ctl); padding: 0; justify-content: center; }
+    #skipBtn .cl { display: none; }
 
     #console { gap: 6px; padding-inline: 8px; min-height: 80px; padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
     .cbtn { width: 46px; height: 56px; }
@@ -331,7 +374,8 @@
     .tile { width: 34px; height: 40px; font-size: 24px; border-radius: 8px; box-shadow: 0 3px 0 var(--accent-deep); }
     #launch { height: 48px; font-size: 20px; padding: 0 18px; }
     #launch .li { width: 24px; height: 24px; }
-    #toast { top: 18%; }
+    #toast { top: 30%; }
+    .cslot { width: 32px; height: 38px; font-size: 24px; border-radius: 8px; }
     .logo { display: none; }
     .card { padding: 14px 18px 12px; }
     .title { font-size: 30px; }
@@ -344,7 +388,9 @@
   }
   @media (max-height: 500px) and (min-width: 640px) {
     #menu .card { width: min(760px, 100%); }
-    .fields { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; align-items: end; }
+    /* Three columns, packed densely: Language | Mode | Speed, then Level (wide) | Sound. */
+    .fields { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: row dense; column-gap: 18px; align-items: end; }
+    .fields > .field.level { grid-column: span 2; }
     .field.row { align-self: center; margin-top: 16px; }
   }
 </style>
@@ -374,6 +420,14 @@
   </div>
   <button class="iconbtn" type="button" id="soundBtn" data-act="sound" data-i18n-label="sound"></button>
   <button class="iconbtn" type="button" data-act="pause" data-i18n-label="pause"><span data-icon="pause"></span></button>
+  <div class="cardrow" id="challengeRow" hidden>
+    <div id="challenge">
+      <button class="iconbtn" type="button" id="sayBtn" data-act="say" data-i18n-label="listen"><span data-icon="soundOn"></span></button>
+      <div id="slots"></div>
+      <button class="iconbtn" type="button" id="peekBtn" data-act="peek" data-i18n-label="peek"><span data-icon="eye"></span></button>
+      <button class="iconbtn" type="button" id="skipBtn" data-act="skip" data-i18n-label="skip"><span class="flip" data-icon="skip"></span><span class="cl" data-i18n="skip"></span></button>
+    </div>
+  </div>
 </div>
 
 <div id="console">
@@ -408,6 +462,13 @@
       </div>
     </div>
     <div class="field">
+      <span class="lbl" data-i18n="mode"></span>
+      <div class="seg">
+        <button type="button" data-act="mode" data-v="free"><span data-i18n="free"></span></button>
+        <button type="button" data-act="mode" data-v="challenge"><span data-i18n="challenge"></span></button>
+      </div>
+    </div>
+    <div class="field level">
       <span class="lbl" data-i18n="level"></span>
       <div class="seg">
         <button type="button" data-act="level" data-v="easy"><span data-i18n="easy"></span><small data-i18n="letters"></small></button>
@@ -457,6 +518,8 @@
 <script src="src/lexicon.js"></script>
 <script src="src/rules.js"></script>
 <script src="src/spawner.js"></script>
+<script src="src/suggest.js"></script>
+<script src="src/challenge.js"></script>
 <script src="src/game.js"></script>
 <script src="src/render.js"></script>
 <script src="src/audio.js"></script>

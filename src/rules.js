@@ -50,7 +50,12 @@
     return 10 * length * LEVELS[level].multiplier;
   }
 
-  const api = { LEVELS, START_LIVES, Plan, judge, score };
+  function challengeScore(length, level, peeked) {
+    const s = score(length, level);
+    return peeked ? Math.floor(s / 2) : s;
+  }
+
+  const api = { LEVELS, START_LIVES, Plan, judge, score, challengeScore };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.Rules = api;
 })(typeof window !== 'undefined' ? window : globalThis);

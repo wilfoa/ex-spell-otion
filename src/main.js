@@ -4,7 +4,7 @@
 
   // ---------- Persistence (every access guarded: storage may be unavailable) ----------
   const SETTINGS_KEY = 'spellDefense.settings';
-  const bestKey = (lang, level) => `spellDefense.best.${lang}.${level}`;
+  const bestKey = (mode, lang, level) => `spellDefense.best.${mode === 'challenge' ? 'challenge.' : ''}${lang}.${level}`;
 
   function read(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -18,7 +18,8 @@
     try { s = JSON.parse(read(SETTINGS_KEY)); } catch (e) { /* corrupt: use defaults */ }
     s = s && typeof s === 'object' ? s : {};
     return {
-      lang: s.lang === 'he' ? 'he' : 'en',
+      lang: s.lang === 'en' ? 'en' : 'he',
+      mode: s.mode === 'challenge' ? 'challenge' : 'free',
       level: Object.prototype.hasOwnProperty.call(Rules.LEVELS, s.level) ? s.level : 'easy',
       speed: Number.isInteger(s.speed) && s.speed >= 1 && s.speed <= 10 ? s.speed : 3,
       sound: s.sound !== false,
@@ -54,6 +55,12 @@
   const wordsFor = (lang) => window.WORDS && window.WORDS[lang];
   const checkWords = () => UI.error(wordsFor(settings.lang) ? '' : UI.I18N[settings.lang].wordsMissing);
 
+  // Word speech only when a voice exists: otherwise the card shows the word written (spec 3.2).
+  function speak(word) {
+    if (Sfx.canSpeak(game.lang)) Sfx.say(game.lang === 'en' ? word.toLowerCase() : word, game.lang);
+  }
+  const challengeWord = () => Lexicon.display([...game.challenge.word], game.lang).join('');
+
   function makeHooks() {
     const R = () => game.R;
     return {
@@ -76,19 +83,33 @@
         Sfx.boom();
         UI.markHit(i);
       },
-      onVerdict(verdict) {
-        if (verdict === 'invalid') { Sfx.fail(); renderer.shake(12); }
+      onVerdict(verdict, shown, suggestion) {
+        if (verdict === 'miss') {
+          Sfx.fail();
+          renderer.shake(12);
+          UI.toast('notQuite', 'bad');
+          return;
+        }
+        if (verdict !== 'invalid') return;
+        Sfx.fail();
+        renderer.shake(12);
+        if (!suggestion) { UI.toast('notWord', 'bad'); return; }
+        UI.showSuggestion(suggestion, shown);
+        speak(suggestion.word);
       },
       onWordDone(word, points) {
         renderer.confetti();
         Sfx.success();
-        Sfx.say(game.lang === 'en' ? word.toLowerCase() : word, game.lang);
+        speak(word);
         refresh();
         UI.toast('great', 'good', points);
       },
       onLives: refresh,
+      // New challenge, or the same word again after a miss.
+      onChallenge(word) { speak(word); refresh(); },
+      onReveal: UI.showReveal,
       onGameOver(score) {
-        const over = game, key = bestKey(over.lang, over.level);
+        const over = game, key = bestKey(over.mode, over.lang, over.level);
         const prevBest = Number(read(key)) || 0;
         const isRecord = score > prevBest;
         if (isRecord) write(key, String(score));
@@ -104,7 +125,7 @@
     if (!words) { checkWords(); UI.showMenu({ canContinue: false }); return; }
     const m = metrics();
     game = Game.createGame({
-      lang: settings.lang, level: settings.level, speed: settings.speed, words,
+      mode: settings.mode, lang: settings.lang, level: settings.level, speed: settings.speed, words,
       W: m.W, H: m.H, groundY: m.groundY, R: m.R,
       hooks: makeHooks(),
     });
@@ -124,11 +145,12 @@
   // launch() clears the plan after onVerdict fires, so refresh once it returns.
   function launch() {
     if (!game || game.phase !== 'playing') return;
+    // Challenge: Enter must obey the same gate as the Launch button.
+    if (game.challenge && game.plan.length !== game.challenge.word.length) return;
     const verdict = game.launch();
     refresh();
     if (verdict === 'tooShort') UI.toast('needLetters', 'warn', Rules.LEVELS[game.level].minLength);
     else if (verdict === 'used') UI.toast('used', 'warn');
-    else if (verdict === 'invalid') UI.toast('notWord', 'bad');
   }
 
   UI.init({
@@ -138,6 +160,18 @@
     onUndo() { if (game) game.undo(); },
     onClear() { if (game) game.clear(); },
     onLaunch: launch,
+    onSay() {
+      if (!game || !game.challenge) return;
+      try { window.speechSynthesis.cancel(); } catch (e) { /* optional */ } // repeated taps must not queue
+      speak(challengeWord());
+    },
+    onPeek() { if (game) game.peek(); },
+    onSkip() {
+      if (!game || !game.challenge || game.phase !== 'playing') return;
+      speak(challengeWord()); // before skip(), so the next word is spoken after it
+      game.skip();
+      refresh(); // skip() drops the plan after its onLives refresh
+    },
     onSpeed(n) {
       settings = { ...settings, speed: n };
       saveSettings();
@@ -152,8 +186,8 @@
       refresh();
     },
     onSettingsChanged(next) {
-      // Changing language or level ends the paused game (spec 2.5).
-      if (game && (next.lang !== settings.lang || next.level !== settings.level)) { game = null; window.__game = null; }
+      // Changing language, mode or level ends the paused game (spec 2.5).
+      if (game && ['lang', 'mode', 'level'].some((k) => next[k] !== settings[k])) { game = null; window.__game = null; }
       settings = next;
       saveSettings();
       refresh();
@@ -177,6 +211,8 @@
   });
 
   window.addEventListener('resize', layout);
+  // Voices load late on some browsers: re-check the challenge card's written fallback when they arrive.
+  try { window.speechSynthesis.addEventListener('voiceschanged', refresh); } catch (e) { /* no speech: fallback stays */ }
 
   // Hidden tab pauses behind the menu; the player resumes with Continue.
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Plan, judge, score } = require('../src/rules.js');
+const { Plan, judge, score, challengeScore } = require('../src/rules.js');
 
 test('Plan marks, undoes, removes, clears', () => {
   const p = new Plan();
@@ -36,4 +36,10 @@ test('score', () => {
   assert.equal(score(3, 'easy'), 30);
   assert.equal(score(4, 'medium'), 80);
   assert.equal(score(6, 'hard'), 180);
+});
+
+test('challengeScore: halved (floor) when peeked', () => {
+  assert.equal(challengeScore(3, 'easy', false), 30);
+  assert.equal(challengeScore(4, 'medium', true), 40);
+  assert.equal(challengeScore(5, 'hard', true), 75);
 });

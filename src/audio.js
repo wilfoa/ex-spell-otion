@@ -79,7 +79,24 @@
         root.speechSynthesis.speak(u);
       } catch (e) { /* speech is optional */ }
     },
+
+    // True when a voice for the language exists; voices load late on some browsers.
+    canSpeak(lang) {
+      if (root.__forceNoVoice || !root.speechSynthesis) return false;
+      if (!voices.length) loadVoices();
+      const re = lang === 'he' ? /^(he|iw)/i : /^en/i; // older Android reports Hebrew as 'iw'
+      return voices.some((v) => re.test(v.lang || ''));
+    },
   };
+
+  let voices = [];
+  function loadVoices() {
+    try { voices = root.speechSynthesis.getVoices() || []; } catch (e) { voices = []; }
+  }
+  if (root.speechSynthesis) {
+    loadVoices();
+    try { root.speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch (e) { /* optional */ }
+  }
 
   root.Sfx = Sfx;
 })(window);

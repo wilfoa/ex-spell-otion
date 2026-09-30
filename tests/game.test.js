@@ -15,6 +15,56 @@ function make(hooks = {}) {
   });
 }
 
+function makeSuggest(hooks) {
+  return createGame({
+    lang: 'en', level: 'easy', speed: 3,
+    words: { valid: 'the cat act at ta', common: 'the cat act' },
+    W: 1000, H: 800, groundY: 700, R: 30, rng: lcg(42), hooks,
+  });
+}
+
+function planLetters(g, letters) {
+  grow(g, letters.length);
+  letters.split('').forEach((l, i) => { g.drones[i].letter = l; g.mark(g.drones[i].id); });
+}
+
+test('invalid launch reports a did-you-mean suggestion', () => {
+  const seen = [];
+  const g = makeSuggest({ onVerdict: (...a) => seen.push(a) });
+  planLetters(g, 'teh');
+  assert.equal(g.launch(), 'invalid');
+  assert.deepEqual(seen[0][2], { word: 'THE', marks: ['same', 'wrong', 'wrong'], missing: [] });
+  assert.equal(g.lives, 4);
+});
+
+test('did-you-mean never suggests a blocklisted word (spoken to a child)', () => {
+  const seen = [];
+  const g = createGame({
+    lang: 'en', level: 'easy', speed: 3,
+    words: { valid: 'fuck luck', common: 'luck' },
+    W: 1000, H: 800, groundY: 700, R: 30, rng: lcg(42), hooks: { onVerdict: (...a) => seen.push(a) },
+  });
+  planLetters(g, 'uck');
+  assert.equal(g.launch(), 'invalid');
+  assert.equal(seen[0][2].word, 'LUCK');
+});
+
+test('invalid launch with no close word has null suggestion', () => {
+  const seen = [];
+  const g = makeSuggest({ onVerdict: (...a) => seen.push(a) });
+  planLetters(g, 'qz');
+  assert.equal(g.launch(), 'invalid');
+  assert.equal(seen[0][2], null);
+});
+
+test('valid launch has null suggestion', () => {
+  const seen = [];
+  const g = makeSuggest({ onVerdict: (...a) => seen.push(a) });
+  planLetters(g, 'cat');
+  assert.equal(g.launch(), 'valid');
+  assert.equal(seen[0][2], null);
+});
+
 // Run until at least n drones are on screen.
 function grow(g, n) {
   for (let i = 0; i < 2000 && g.drones.length < n; i++) g.update(0.05);
@@ -257,6 +307,174 @@ test('onFire fires once per missile, even on zero-dt frames', () => {
   for (let i = 0; i < 10; i++) { g.update(0.05); g.update(0); }
   assert.equal(fired.length, 3);
   assert.equal(new Set(fired).size, 3);
+});
+
+// ---- Challenge mode ----
+
+function makeChallenge(hooks = {}) {
+  return createGame({
+    mode: 'challenge', lang: 'en', level: 'easy', speed: 3,
+    words: { valid: 'cat act', common: 'cat' },
+    W: 1000, H: 800, groundY: 700, R: 30, rng: lcg(7), hooks,
+  });
+}
+
+// Run long enough for coverage, then mark one unmarked drone per letter.
+function markWord(g, letters) {
+  for (const l of letters) {
+    const d = g.drones.find((x) => x.letter === l && !x.marked);
+    assert.ok(d, `no drone for ${l}`);
+    assert.ok(g.mark(d.id));
+  }
+}
+
+function warm(g) {
+  for (let i = 0; i < 300; i++) g.update(0.05);
+}
+
+function runToPlaying(g) {
+  for (let i = 0; i < 600 && g.phase !== 'playing'; i++) g.update(0.016);
+  assert.equal(g.phase, 'playing');
+}
+
+test('challenge: first update announces the word', () => {
+  const seen = [];
+  const g = makeChallenge({ onChallenge: (w) => seen.push(w) });
+  assert.equal(g.mode, 'challenge');
+  assert.deepEqual(g.challenge, { word: 'cat', peeked: false });
+  assert.deepEqual(seen, []);
+  g.update(0.05);
+  assert.deepEqual(seen, ['CAT']);
+  g.update(0.05);
+  assert.deepEqual(seen, ['CAT']);
+});
+
+test('free mode has no challenge and no peek/skip', () => {
+  const g = make();
+  assert.equal(g.mode, 'free');
+  assert.equal(g.challenge, null);
+  g.update(0.05);
+  assert.equal(g.peek(), false);
+  assert.equal(g.skip(), false);
+  assert.equal(g.lives, 5);
+});
+
+test('challenge: every needed letter gets a drone', () => {
+  const g = makeChallenge();
+  warm(g);
+  for (const l of 'cat') assert.ok(g.drones.some((d) => d.letter === l && !d.marked), `no ${l}`);
+  assert.ok(g.forcedSpawns > 0);
+});
+
+test('challenge: short, then match scores and starts a new challenge', () => {
+  const seen = [];
+  const verdicts = [];
+  const done = [];
+  const g = makeChallenge({
+    onChallenge: (w) => seen.push(w),
+    onVerdict: (...a) => verdicts.push(a),
+    onWordDone: (w, p) => done.push([w, p]),
+  });
+  warm(g);
+  markWord(g, 'ca');
+  assert.equal(g.launch(), 'short');
+  assert.equal(g.plan.length, 2);
+  assert.equal(g.lives, 5);
+  markWord(g, 't');
+  assert.equal(g.launch(), 'match');
+  assert.deepEqual(verdicts[1], ['match', 'CAT', null]);
+  assert.equal(g.phase, 'launching');
+  runToPlaying(g);
+  assert.equal(g.score, 30);
+  assert.deepEqual(done, [['CAT', 30]]);
+  assert.deepEqual(seen, ['CAT', 'CAT']);
+  assert.equal(g.plan.length, 0);
+});
+
+test('challenge: peek halves the score', () => {
+  const reveals = [];
+  const g = makeChallenge({ onReveal: (...a) => reveals.push(a) });
+  warm(g);
+  assert.equal(g.peek(), true);
+  assert.equal(g.challenge.peeked, true);
+  assert.deepEqual(reveals, [['CAT', 2]]);
+  markWord(g, 'cat');
+  assert.equal(g.launch(), 'match');
+  runToPlaying(g);
+  assert.equal(g.score, 15);
+  assert.equal(g.challenge.peeked, false);
+});
+
+test('challenge: miss costs a life and keeps the word', () => {
+  const seen = [];
+  const g = makeChallenge({ onChallenge: (w) => seen.push(w) });
+  warm(g);
+  markWord(g, 'tac');
+  assert.equal(g.launch(), 'miss');
+  assert.equal(g.lives, 4);
+  assert.equal(g.challenge.word, 'cat');
+  assert.equal(g.plan.length, 0);
+  assert.ok(g.drones.every((d) => !d.marked));
+  assert.deepEqual(seen, ['CAT', 'CAT']);
+  assert.equal(g.phase, 'playing');
+});
+
+test('challenge: skip costs a life, reveals and starts a new challenge', () => {
+  const seen = [];
+  const reveals = [];
+  const lives = [];
+  const g = makeChallenge({
+    onChallenge: (w) => seen.push(w), onReveal: (...a) => reveals.push(a), onLives: (n) => lives.push(n),
+  });
+  warm(g);
+  markWord(g, 'c');
+  assert.equal(g.skip(), true);
+  assert.equal(g.lives, 4);
+  assert.deepEqual(lives, [4]);
+  assert.deepEqual(reveals, [['CAT', 2]]);
+  assert.deepEqual(seen, ['CAT', 'CAT']);
+  assert.equal(g.plan.length, 0);
+});
+
+test('challenge: skip at last life ends the game without a new challenge', () => {
+  const seen = [];
+  const over = [];
+  const g = makeChallenge({ onChallenge: (w) => seen.push(w), onGameOver: (s) => over.push(s) });
+  g.update(0.05);
+  for (let i = 0; i < 5; i++) assert.equal(g.skip(), true);
+  assert.equal(g.phase, 'over');
+  assert.deepEqual(over, [0]);
+  assert.equal(seen.length, 5);
+  assert.equal(g.skip(), false);
+});
+
+test('challenge mode never builds or queries the suggestion index', (t) => {
+  const Suggest = require('../src/suggest.js');
+  const boom = () => { throw new Error('Suggest used in challenge mode'); };
+  t.mock.method(Suggest, 'buildIndex', boom);
+  t.mock.method(Suggest, 'suggest', boom);
+  const g = makeChallenge();
+  warm(g);
+  markWord(g, 'tac');
+  assert.equal(g.launch(), 'miss');
+});
+
+test('challenge: peek/skip do nothing while launching or paused', () => {
+  const g = makeChallenge();
+  warm(g);
+  markWord(g, 'cat');
+  assert.equal(g.launch(), 'match');
+  assert.equal(g.peek(), false);
+  assert.equal(g.skip(), false);
+  assert.equal(g.challenge.peeked, false);
+  assert.equal(g.lives, 5);
+  runToPlaying(g);
+  g.pause();
+  assert.equal(g.peek(), false);
+  assert.equal(g.skip(), false);
+  assert.equal(g.launch(), 'busy');
+  assert.equal(g.challenge.peeked, false);
+  assert.equal(g.lives, 5);
 });
 
 // [dx, dy] of the drone's aim point from the cannon. (150, 50) is inside the

@@ -7,6 +7,14 @@
       howto: 'Tap the drones to spell a word, then press Launch!',
       logoLetter: 'A',
       language: 'Language',
+      mode: 'Mode',
+      free: 'Free',
+      challenge: 'Challenge',
+      didYouMean: 'Did you mean {w}?',
+      listen: 'Hear the word',
+      peek: 'Peek',
+      skip: 'Skip',
+      notQuite: 'Not quite!',
       level: 'Level',
       easy: 'Easy',
       medium: 'Medium',
@@ -43,6 +51,14 @@
       howto: 'הקישו על הרחפנים כדי לבנות מילה, ואז לחצו על שיגור!',
       logoLetter: 'א',
       language: 'שפה',
+      mode: 'מצב',
+      free: 'חופשי',
+      challenge: 'אתגר',
+      didYouMean: 'התכוונת ל־{w}?',
+      listen: 'שמעו את המילה',
+      peek: 'הצצה',
+      skip: 'דלג',
+      notQuite: 'לא בדיוק!',
       level: 'רמה',
       easy: 'קל',
       medium: 'בינוני',
@@ -92,6 +108,8 @@
     undo: svg('<path d="M8.5 14 4 9.5 8.5 5"/><path d="M4 9.5h10a5.5 5.5 0 0 1 0 11h-3.5"/>'),
     clear: svg('<path d="M4 6.8h16M9.5 6.8V4.3h5v2.5M6.3 6.8l1 13.2h9.4l1-13.2M10.3 10.5v6M13.7 10.5v6"/>'),
     lock: svg('<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/><path d="M12 14.5v2"/>'),
+    eye: svg('<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'),
+    skip: svg('<path d="M5.5 5.5 14.5 12l-9 6.5z" fill="currentColor"/><path d="M18.5 5.5v13"/>'),
     star: svg('<path d="M12 3.2l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.6l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" fill="currentColor"/>'),
   };
 
@@ -99,10 +117,11 @@
   const qa = (sel) => document.querySelectorAll(sel);
 
   let h = {};
-  let settings = { lang: 'en', level: 'easy', speed: 3, sound: true };
+  let settings = { lang: 'he', mode: 'free', level: 'easy', speed: 3, sound: true };
   let game = null;
   let played = false;
-  let prev = { game: null, ids: [], lives: 0, score: 0 };
+  let prev = { game: null, ids: [], lives: 0, score: 0, filled: 0 };
+  let reveal = { game: null, word: '', timer: 0 }; // peek/skip: the written word shows in the slots for a while
   let els;
 
   const t = (key, n) => String(I18N[settings.lang][key]).replace('{n}', n);
@@ -116,6 +135,7 @@
       hearts: $('hearts'), score: $('score'), soundBtn: $('soundBtn'), soundSwitch: $('soundSwitch'),
       undo: $('undoBtn'), clear: $('clearBtn'), toast: $('toast'), pop: $('speedpop'), chip: document.querySelector('.chip'),
       cont: $('continueBtn'), start: $('startBtn'), startLabel: $('startLabel'), err: $('menuError'),
+      cardRow: $('challengeRow'), slots: $('slots'), say: $('sayBtn'), peek: $('peekBtn'), skip: $('skipBtn'),
     };
     qa('[data-icon]').forEach((el) => { el.innerHTML = ICONS[el.dataset.icon]; });
     qa('[data-act="level"] small').forEach((el) => {
@@ -154,7 +174,11 @@
       case 'undo': h.onUndo(); break;
       case 'clear': h.onClear(); break;
       case 'launch': h.onLaunch(); break;
+      case 'say': h.onSay(); break;
+      case 'peek': h.onPeek(); break;
+      case 'skip': h.onSkip(); break;
       case 'lang':
+      case 'mode':
       case 'level':
         if (settings[b.dataset.act] !== v) h.onSettingsChanged({ ...settings, [b.dataset.act]: v });
         break;
@@ -202,7 +226,7 @@
     document.body.classList.toggle('no-game', !g);
     applyText();
 
-    qa('[data-act="lang"], [data-act="level"]').forEach((b) => {
+    qa('[data-act="lang"], [data-act="mode"], [data-act="level"]').forEach((b) => {
       b.setAttribute('aria-pressed', String(s[b.dataset.act] === b.dataset.v));
     });
     qa('[data-speed]').forEach((el) => { el.textContent = s.speed; });
@@ -219,8 +243,12 @@
     renderHearts(g, fresh);
     renderScore(g, fresh);
     renderPlan(g, fresh);
+    renderCard(g, fresh);
     const playing = g.phase === 'playing';
-    const locked = !playing || g.plan.length < Rules.LEVELS[g.level].minLength;
+    // Challenge: only a plan exactly as long as the word may launch (a longer one would be a costly miss).
+    const locked = !playing || (g.challenge
+      ? g.plan.length !== g.challenge.word.length
+      : g.plan.length < Rules.LEVELS[g.level].minLength);
     els.launch.disabled = locked;
     const icon = locked ? 'lock' : 'rocket';
     if (els.launchIcon.dataset.icon !== icon) {
@@ -249,7 +277,8 @@
   }
 
   function renderPlan(g, fresh) {
-    const letters = g.word(), ids = g.plan.ids, min = Rules.LEVELS[g.level].minLength;
+    const letters = g.word(), ids = g.plan.ids;
+    const min = g.challenge ? g.challenge.word.length : Rules.LEVELS[g.level].minLength;
     const launching = g.phase === 'launching';
     const known = fresh ? [] : prev.ids;
     const plan = els.plan;
@@ -276,6 +305,38 @@
     // Keep the newest letter in view when the word is longer than the tray (RTL scrolls negative).
     if (letters.length) plan.scrollLeft = (document.documentElement.dir === 'rtl' ? -1 : 1) * plan.scrollWidth;
     prev.ids = ids.slice();
+  }
+
+  // Spec 3.2: one slot per word letter, filled with the plan (no correctness shown, extra letters dropped).
+  // Written fallback (sound off or no voice): empty slots show the target letter as a ghost, filled slots keep it faintly
+  // (data-t) so b/d or ס/ש can be compared before Launch; Peek/Speaker hide.
+  function renderCard(g, fresh) {
+    els.cardRow.hidden = !g.challenge;
+    if (!g.challenge) return;
+    const written = !settings.sound || !root.Sfx.canSpeak(g.lang);
+    els.say.hidden = els.peek.hidden = written;
+    els.peek.disabled = els.skip.disabled = g.phase !== 'playing';
+    const revealing = reveal.game === g && reveal.word;
+    const word = [...(revealing ? reveal.word : root.Lexicon.display([...g.challenge.word], g.lang).join(''))];
+    const letters = revealing ? [] : g.word();
+    const known = fresh ? 0 : prev.filled;
+    els.slots.style.setProperty('--n', word.length);
+    els.slots.textContent = '';
+    word.forEach((ch, i) => {
+      const s = document.createElement('span');
+      s.className = 'cslot';
+      if (revealing) { s.classList.add('reveal'); s.textContent = ch; }
+      else if (i < letters.length) { s.classList.add('filled'); if (i >= known) s.classList.add('pop'); s.textContent = letters[i]; if (written) s.dataset.t = ch; }
+      else if (written) { s.classList.add('ghost'); s.textContent = ch; }
+      els.slots.append(s);
+    });
+    prev.filled = letters.length;
+  }
+
+  function showReveal(word, seconds) {
+    clearTimeout(reveal.timer);
+    reveal = { game, word, timer: setTimeout(() => { reveal = { game: null, word: '', timer: 0 }; if (game) renderCard(game, false); }, seconds * 1000) };
+    if (game) renderCard(game, false);
   }
 
   function restartAnim(el, cls) {
@@ -315,6 +376,35 @@
     els.toast.replaceChildren(el);
   }
 
+  // "Did you mean WORD?" with the attempt beneath: differing letters red, a red caret where a letter is missing.
+  function showSuggestion(suggestion, attemptDisplay) {
+    const el = document.createElement('div');
+    el.className = 'toast suggest';
+    const line = document.createElement('span');
+    const [before, after] = t('didYouMean').split('{w}');
+    const word = document.createElement('b');
+    word.textContent = suggestion.word;
+    line.append(before, word, after);
+    const row = document.createElement('span');
+    row.className = 'attempt';
+    const letters = [...attemptDisplay];
+    for (let i = 0; i <= letters.length; i++) {
+      if (suggestion.missing.includes(i)) {
+        const caret = document.createElement('span');
+        caret.className = 'caret';
+        row.append(caret);
+      }
+      if (i === letters.length) break;
+      const l = document.createElement('span');
+      l.className = 'al' + (suggestion.marks[i] === 'wrong' ? ' wrong' : '');
+      l.textContent = letters[i];
+      row.append(l);
+    }
+    el.append(line, row);
+    el.addEventListener('animationend', () => el.remove());
+    els.toast.replaceChildren(el);
+  }
+
   function showMenu({ canContinue }) {
     togglePopover(false);
     els.over.hidden = true;
@@ -339,5 +429,5 @@
     els.start.disabled = !!message;
   }
 
-  root.UI = { I18N, ICONS, init, update, toast, showMenu, showGameOver, flashPlanLoss, markHit, error };
+  root.UI = { I18N, ICONS, init, update, toast, showSuggestion, showReveal, showMenu, showGameOver, flashPlanLoss, markHit, error };
 })(window);

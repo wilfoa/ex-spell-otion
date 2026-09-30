@@ -55,7 +55,7 @@ Under the top bar, centered, always visible during a challenge game:
 ### 4.1 Definitions
 - **needed** = multiset of the challenge word's letters minus the multiset of letters currently in the plan (marked drones). Plan letters that are not in the word do not reduce anything.
 - **fall time left** for a drone = `(groundY − 2R − d.y) / d.vy` seconds.
-- **T(d)** = `min(4 + 1 × |needed|, 0.6 × groundY / d.vy)` seconds — capped at 60 % of the drone's full fall time (spawn at `-2R` to landing at `groundY − 2R` is `groundY` px), so a freshly spawned drone always counts as reachable even at speed 10 on a short screen.
+- **T(d)** = `min(4 + 1 × |needed|, 0.4 × groundY / d.vy)` seconds — capped at 40 % of the drone's full fall time (spawn at `-2R` to landing at `groundY − 2R` is `groundY` px), so a freshly spawned drone always counts as reachable even at speed 10 on a short screen.
 - A drone is **reachable** if it is unmarked and its fall time left ≥ T(d).
 - **missing** = needed minus the multiset of letters on reachable drones.
 
@@ -78,10 +78,10 @@ Property: in a simulated Challenge game (any seed, speed 1 and 10, W = 360 and 1
 
 - Triggered when a Free-mode launch is judged `invalid`.
 - Distance: optimal-string-alignment Damerau-Levenshtein (insert, delete, substitute, adjacent transposition, each cost 1), on normalized words.
-- Candidates: valid-list words with `length ≥ minLength` and `|len − attemptLen| ≤ maxDist`. `maxDist = 1` if `attemptLen ≤ 4`, else `2`.
-- Choose the candidate with the smallest distance; ties broken by frequency rank (earlier in the valid list = more common). Distance 0 is impossible (the attempt was invalid).
+- Candidates: common-list words (blocklist already removed) with `length ≥ minLength` and `|len − attemptLen| ≤ maxDist`. `maxDist = 1` if `attemptLen ≤ 4`, else `2`.
+- Choose the candidate with the smallest distance; ties broken by frequency rank (earlier in the common list = more common). Distance 0 is impossible (the attempt was invalid).
 - If no candidate within `maxDist`: no suggestion.
-- UI: the usual life loss, buzzer and shake still happen. Instead of "Not a word!", a card shows for ~3 s: "Did you mean **CAT**?" (Hebrew: "התכוונת ל**חתול**?") with the player's attempt beneath, letters that differ from the suggestion in red. The suggestion is spoken (if sound on). No suggestion → the existing "Not a word!" toast.
+- UI: the usual life loss, buzzer and shake still happen. Instead of "Not a word!", a card shows for ~3 s: "Did you mean **CAT**?" (Hebrew: "התכוונת ל־**חתול**?", with a maqaf so ל never fuses into a different word) with the player's attempt beneath, letters that differ from the suggestion in red. The suggestion is spoken (if sound on). No suggestion → the existing "Not a word!" toast.
 - `diff(attempt, suggestion)` returns, for each attempt letter, `'same' | 'wrong'`, from the OSA alignment backtrace (substituted/transposed/inserted letters are `'wrong'`); if the suggestion is longer, the missing positions are reported as `missing` indices so the card can show a red caret between letters.
 - Performance: an index by word length built once per game; lookup ≤ 20 ms on a phone.
 
